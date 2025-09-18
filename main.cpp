@@ -25,8 +25,8 @@ client_task (zsock_t *pipe, void *args)
     while (true) {
         zstr_send (client, "HELLO");
 
-        zsock_t *ready = (zsock_t *)zpoller_wait (poller, -1);
-        if (ready == NULL) continue;   // Interrupted
+        auto *ready = static_cast<zsock_t *>(zpoller_wait(poller, -1));
+        if (ready == nullptr) continue;   // Interrupted
         else if (ready == pipe) break; // Shutdown
         else assert(ready == client);  // Data Available
 
@@ -60,8 +60,8 @@ worker_task (zsock_t *pipe, void *args)
 
     //  Process messages as they arrive
     while (true) {
-        zsock_t *ready = (zsock_t *)zpoller_wait (poller, -1);
-        if (ready == NULL) continue;   // Interrupted
+        auto *ready = static_cast<zsock_t *>(zpoller_wait(poller, -1));
+        if (ready == nullptr) continue;   // Interrupted
         else if (ready == pipe) break; // Shutdown
         else assert(ready == worker);  // Data Available
 
@@ -93,11 +93,11 @@ typedef struct {
 //  Handle input from client, on frontend
 static int s_handle_frontend (zloop_t *loop, zsock_t *reader, void *arg)
 {
-    lbbroker_t *self = (lbbroker_t *) arg;
+    auto *self = static_cast<lbbroker_t *>(arg);
     zmsg_t *msg = zmsg_recv (self->frontend);
     if (msg) {
-        zmsg_pushmem (msg, NULL, 0); // delimiter
-        zmsg_push (msg, (zframe_t *) zlist_pop (self->workers));
+        zmsg_pushmem (msg, nullptr, 0); // delimiter
+        zmsg_push (msg, static_cast<zframe_t *>(zlist_pop(self->workers)));
         zmsg_send (&msg, self->backend);
 
         //  Cancel reader on frontend if we went from 1 to 0 workers
@@ -112,7 +112,7 @@ static int s_handle_frontend (zloop_t *loop, zsock_t *reader, void *arg)
 static int s_handle_backend (zloop_t *loop, zsock_t *reader, void *arg)
 {
     //  Use worker identity for load-balancing
-    lbbroker_t *self = (lbbroker_t *) arg;
+    auto *self = static_cast<lbbroker_t *>(arg);
     zmsg_t *msg = zmsg_recv (self->backend);
     if (msg) {
         zframe_t *identity = zmsg_pop (msg);
@@ -140,21 +140,19 @@ static int s_handle_backend (zloop_t *loop, zsock_t *reader, void *arg)
 //  Because the reactor is a CZMQ class, this example may not translate
 //  into all languages equally well.
 
-int main (void)
+int main ()
 {
-    lbbroker_t *self = (lbbroker_t *) zmalloc (sizeof (lbbroker_t));
+    auto *self = static_cast<lbbroker_t *>(zmalloc(sizeof (lbbroker_t)));
     self->frontend = zsock_new_router ("ipc://frontend.ipc");
     self->backend = zsock_new_router ("ipc://backend.ipc");
 
     zactor_t *actors[NBR_CLIENTS + NBR_WORKERS];
     int actor_nbr = 0;
 
-    int client_nbr;
-    for (client_nbr = 0; client_nbr < NBR_CLIENTS; client_nbr++)
-        actors[actor_nbr++] = zactor_new (client_task, NULL);
-    int worker_nbr;
-    for (worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++)
-        actors[actor_nbr++] = zactor_new (worker_task, NULL);
+    for (int client_nbr = 0; client_nbr < NBR_CLIENTS; client_nbr++)
+        actors[actor_nbr++] = zactor_new (client_task, nullptr);
+    for (int worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++)
+        actors[actor_nbr++] = zactor_new (worker_task, nullptr);
 
     //  Queue of available workers
     self->workers = zlist_new ();
@@ -169,7 +167,7 @@ int main (void)
 
     //  When we're done, clean up properly
     while (zlist_size (self->workers)) {
-        zframe_t *frame = (zframe_t *) zlist_pop (self->workers);
+        auto *frame = static_cast<zframe_t *>(zlist_pop(self->workers));
         zframe_destroy (&frame);
     }
     zlist_destroy (&self->workers);
